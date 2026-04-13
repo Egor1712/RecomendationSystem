@@ -1,0 +1,6 @@
+DATASET_DIRECTORY = r'../dataset'
+WORKING_DATASET_DIRECTORY = r'../dataset_reduced'
+
+TWO_TOWER_MODEL = 'tow_tower'
+LIGTFM = 'LIGHTFM'
+FOLDS = 'FOLDS'

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>H&M Рекомендации</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🛍️ Персональный стилист H&M</h1>
+        <div class="search-box">
+            <input type="text" id="userId" placeholder="Введите ID пользователя (например, 1234567890)">
+            <button id="loadBtn">Показать рекомендации</button>
+        </div>
+        <div class="results">
+            <div class="column">
+                <h2>📦 История покупок</h2>
+                <div id="historyGrid" class="grid">Введите ID для загрузки</div>
+            </div>
+            <div class="column">
+                <h2>✨ Рекомендации для вас</h2>
+                <div id="recGrid" class="grid">—</div>
+            </div>
+        </div>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>

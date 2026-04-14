@@ -26,7 +26,6 @@ def load_model(num_users, num_items):
 
 
 def get_popular_items(transactions, top_k=100):
-    """Самые популярные товары по частоте покупок."""
     pop = transactions['article_id'].value_counts().head(top_k).index.tolist()
     return pop
 

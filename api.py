@@ -1,17 +1,29 @@
+import os.path
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
+
+import consts
+from src.dataset_preprocess import build_dataset_with_matrix
 from src.inference import HmRecommender
-from src.preprocess import load_hm_data, build_user_item_features
+from src.utils import load_data
 
 app = FastAPI(title="H&M Recommendation API")
 
+
+class CFG:
+    model_type = consts.LIGTFM
+    data_output = './output'
+
+
 # Монтируем папки для статики и изображений
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/images", StaticFiles(directory="images"), name="images")
+app.mount("/images", StaticFiles(directory=consts.IMAGES_DATASET_DIRECTORY), name="images")
+os.makedirs(CFG.data_output, exist_ok=True)
 
 
 # Глобальные объекты
@@ -42,16 +54,16 @@ class RecommendResponse(BaseModel):
 async def startup_event():
     global recommender, articles_df, transactions_df, user_to_idx
     print("Загрузка данных...")
-    articles_df, customers_df, transactions_df = load_hm_data()
+    transactions_df, articles_df, customers_df, _ = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.data_output)
 
     # Строим признаки и обучаем/загружаем модель (упрощённо – загружаем готовую)
-    interaction, user_features, item_features, user_to_idx_map, item_to_idx_map = build_user_item_features(
-        articles_df, customers_df, transactions_df
-    )
-    user_to_idx = user_to_idx_map
+    interaction, user_features, item_features, user_to_idx, item_to_idx = build_dataset_with_matrix(articles_df,
+                                                                                        customers_df,
+                                                                                        transactions_df,
+                                                                                        CFG.data_output)
 
     # Инициализируем рекомендателя
-    recommender = HmRecommender()
+    recommender = HmRecommender(CFG.model_type)
     recommender.set_features(user_features, item_features)
 
     print("API готов")
@@ -84,7 +96,7 @@ async def get_frontend():
 async def get_user_history(user_id: str):
     """Возвращает список купленных пользователем товаров (с картинками)."""
     # Фильтруем транзакции по customer_id
-    user_purchases = transactions_df[transactions_df['customer_id'] == user_id]
+    user_purchases = tra1nsactions_df[transactions_df['customer_id'] == idx]
     if user_purchases.empty:
         return HistoryResponse(user_id=user_id, purchases=[])
 

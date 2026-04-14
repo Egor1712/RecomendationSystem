@@ -1,3 +1,6 @@
+import glob
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
 import os
@@ -28,14 +31,10 @@ def reduce_hm_rows(input_dir, output_dir, sample_frac=0.1, random_state=42):
     print(f"   Сохранено строк: {len(cust_filtered)}")
     del customers, cust_filtered
 
-    # 3. Фильтруем transactions_train.csv чанками
     print("\n3. Фильтрация transactions_train.csv...")
     output_trans_path = os.path.join(output_dir, 'transactions_train.csv')
     output_sub_path = os.path.join(output_dir, 'sample_submission.csv')
 
-    # Используем tqdm для отображения прогресса (примерное количество чанков можно оценить)
-    # Для этого узнаем общее число строк (быстро через wc -l или приблизительно)
-    # Здесь для простоты прогресс-бар будет без общего количества, только по чанкам.
     transaction_df = pd.read_csv(trans_path)
     filtered_df = transaction_df[transaction_df['customer_id'].isin(selected_cust_ids_set)]
     filtered_df.to_csv(output_trans_path, index=False)
@@ -48,9 +47,20 @@ def reduce_hm_rows(input_dir, output_dir, sample_frac=0.1, random_state=42):
     art_path = os.path.join(input_dir, 'articles.csv')
     print("4. Сохранение articles.csv (все строки)...")
     articles = pd.read_csv(art_path)
-    articles.to_csv(os.path.join(output_dir, 'articles.csv'), index=False)
+
+    available_article_ids = articles['article_id'].unique()
+    article_filtered = articles[articles['article_id'].isin(available_article_ids)]
+    article_filtered.to_csv(os.path.join(output_dir, 'articles.csv'), index=False)
     print(f"Сохранено строк: {len(articles)}")
-    del articles
+    images_path = os.path.join(input_dir, 'images')
+    new_images_path = os.path.join(output_dir, 'images')
+    os.makedirs(new_images_path, exist_ok=True)
+    for path in glob.glob(f'{images_path}/**/*.jpg', recursive=True):
+        file = Path(path)
+        if int(file.stem[1:]) in available_article_ids:
+            os.replace(path, os.path.join(new_images_path, file.name))
+
+    del articles, article_filtered
 
 
 if __name__ == "__main__":

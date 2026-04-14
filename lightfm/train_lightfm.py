@@ -1,16 +1,28 @@
+import sys
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from fontTools.misc.cython import returns
 from lightfm import LightFM
 from sklearn.model_selection import train_test_split
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
+
+import os
+from lightfm.evaluation import precision_at_k
+
+sys.path.append(os.path.abspath("../"))
+sys.path.append(os.path.abspath("../../"))
+sys.path.append(os.path.abspath("../../../"))
 
 import consts
 from src.dataset_preprocess import build_dataset_with_matrix
 from src.utils import save_model, load_data
-import os
 
 class CFG:
     data_output = './output'
+    num_threads = 24
     lightfm_params = {
         'loss': 'warp',
         "learning_rate": 0.05,
@@ -23,41 +35,18 @@ class CFG:
 
 os.makedirs(CFG.data_output, exist_ok=True)
 
-def map_at_k(model, test_interactions, user_features, item_features, k=12):
-    n_users = test_interactions.shape[0]
-    n_items = test_interactions.shape[1]
-    user_indices = range(n_users)
-
-    all_item_ids = np.arange(n_items)
-    ap_scores = []
-
-    for uid in user_indices:
-        true_items = test_interactions[uid].indices
-        if len(true_items) == 0:
-            continue
-
-        # Оценки для всех товаров для данного пользователя
-        # model.predict ожидает user_ids и item_ids одинаковой длины
-        user_ids = np.full(n_items, uid, dtype=np.int32)
-        scores = model.predict(user_ids, all_item_ids,
-                               user_features=user_features,
-                               item_features=item_features)
-        top_k_indices = np.argsort(-scores)[:k]
-
-        hits = 0
-        precision_sum = 0.0
-        for pos, idx in enumerate(top_k_indices, start=1):
-            if idx in true_items:
-                hits += 1
-                precision_sum += hits / pos
-        ap = precision_sum / min(len(true_items), k)
-        ap_scores.append(ap)
-
-    return np.mean(ap_scores) if ap_scores else 0.0
-
+def map_at_k_v2(model, test_interactions, user_features, item_features, k=12):
+    precision_value = precision_at_k(model=model,
+                                     test_interactions=test_interactions,
+                                     num_threads=CFG.num_threads,
+                                     k= k,
+                                     check_intersections=True,
+                                     user_features=user_features,
+                                     item_features=item_features)
+    return precision_value.mean()
 
 def train_lightfm_with_logging(interaction, user_features, item_features,
-                               epochs=30, num_threads=24, validation_size=0.2,
+                               epochs=30, num_threads=CFG.num_threads, validation_size=0.2,
                                k=12, log_dir='./logs', save_best=True):
     train_interaction, val_interaction = train_test_split(interaction, test_size=validation_size, random_state=42)
 
@@ -71,24 +60,23 @@ def train_lightfm_with_logging(interaction, user_features, item_features,
 
     print("Начинаем обучение...")
     for epoch in range(1, epochs + 1):
-        # Первая эпоха – fit, последующие – fit_partial
         if epoch == 1:
             model.fit(train_interaction,
                       user_features=user_features,
                       item_features=item_features,
                       epochs=1,
                       num_threads=num_threads,
-                      verbose=False)
+                      verbose=True)
         else:
             model.fit_partial(train_interaction,
                               user_features=user_features,
                               item_features=item_features,
                               epochs=1,
                               num_threads=num_threads,
-                              verbose=False)
+                              verbose=True)
 
         # Вычисляем MAP@12 на валидации (подвыборка для скорости)
-        map_score = map_at_k(model, val_interaction, user_features, item_features, k=k)
+        map_score = map_at_k_v2(model, val_interaction, user_features, item_features, k=k)
         history['epoch'].append(epoch)
         history['map@12'].append(map_score)
 

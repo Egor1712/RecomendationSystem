@@ -14,6 +14,7 @@ from two_tower.model import HMDataset, TwoTowerModel, train_two_tower_epoch, map
 
 class CFG:
     data_output = './output'
+    experiment_name = '1'
     lightfm_params = {
         'loss': 'warp',
         "learning_rate": 0.05,
@@ -24,6 +25,7 @@ class CFG:
     }
 
 os.makedirs(CFG.data_output, exist_ok=True)
+os.makedirs(os.path.join(CFG.data_output, CFG.experiment_name), exist_ok=True)
 
 def train_two_tower_with_logging(interaction,
                                  epochs=30,
@@ -32,8 +34,8 @@ def train_two_tower_with_logging(interaction,
                                  learning_rate=0.001,
                                  validation_size=0.2,
                                  k=12,
-                                 log_dir='./logs_two_tower', save_best=True,
-                                 save_path='./two_tower_best.pth'):
+                                 save_best=True):
+    experiment_path = os.path.join(CFG.data_output, CFG.experiment_name)
     # Разделение на train/validation
     train_interaction, val_interaction = train_test_split(interaction, test_size=validation_size, random_state=42)
     train_dataset = HMDataset(train_interaction, num_negatives=num_negatives)
@@ -44,8 +46,7 @@ def train_two_tower_with_logging(interaction,
     model = TwoTowerModel(interaction.shape[0], interaction.shape[1], embedding_dim).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, 'training_log.csv')
+    log_file = os.path.join(experiment_path, 'training_log.csv')
     history = {'epoch': [], 'train_loss': [], 'map@12': []}
     best_map = -1.0
 
@@ -59,7 +60,7 @@ def train_two_tower_with_logging(interaction,
         epoch_iterator.set_postfix({"Loss": f"{loss:.4f}", "MAP@12": f"{map_score:.6f}"})
         if save_best and map_score > best_map:
             best_map = map_score
-            torch.save(model.state_dict(), save_path)
+            torch.save(model.state_dict(), os.path.join(experiment_path,  'two_tower_best.pt'))
             tqdm.write(f"  -> Новая лучшая модель сохранена (MAP@{k}={map_score:.6f})")
 
     pd.DataFrame(history).to_csv(log_file, index=False)
@@ -71,7 +72,7 @@ def train_two_tower_with_logging(interaction,
     plt.ylabel(f'MAP@{k}')
     plt.title(f'Two-Tower: MAP@{k} on Validation')
     plt.grid(True)
-    plt.savefig(os.path.join(log_dir, 'map_curve.png'), dpi=150)
+    plt.savefig(os.path.join(experiment_path, 'map_curve.png'), dpi=150)
     plt.show()
     # График loss
     plt.figure(figsize=(10, 6))
@@ -80,7 +81,7 @@ def train_two_tower_with_logging(interaction,
     plt.ylabel('Train Loss (BPR)')
     plt.title('Two-Tower: Training Loss')
     plt.grid(True)
-    plt.savefig(os.path.join(log_dir, 'loss_curve.png'), dpi=150)
+    plt.savefig(os.path.join(experiment_path, 'loss_curve.png'), dpi=150)
     plt.show()
     return model, history
 

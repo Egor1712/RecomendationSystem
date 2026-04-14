@@ -1,24 +1,28 @@
+import sys
+
 import pandas as pd
 
 import consts
-from src.preprocess import build_user_item_features
 from src.inference import HmRecommender
 import joblib
 import os
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
+sys.path.append(os.path.abspath("../"))
+sys.path.append(os.path.abspath("../../"))
+sys.path.append(os.path.abspath("../../../"))
 from src.utils import load_data
+from src.dataset_preprocess import build_dataset_with_matrix
 
 
 def get_popular_items(transactions, top_k=100):
-    """Возвращает список самых популярных article_id на основе частоты покупок."""
     pop = transactions['article_id'].value_counts().head(top_k).index.tolist()
     return pop
 
 
 def predict_for_user(user_id, recommender, top_k, popular_items):
-    """Функция для одного пользователя (вызывается в потоке)."""
     try:
         recs = recommender.recommend(user_id, top_k=top_k)
         article_ids = [str(rec[0]) for rec in recs]
@@ -40,9 +44,7 @@ def create_submission(model_path='./models/lightfm_best.pkl',
 
     # 3. Строим признаки (требуется для модели)
     print("Построение признаков...")
-    interaction, user_features, item_features, user_to_idx, item_to_idx = build_user_item_features(
-        articles, customers, transactions
-    )
+    interaction, user_features, item_features, _, _ = build_dataset_with_matrix(articles, customers, transactions, './output')
 
     # 4. Загружаем маппинги и популярные товары
     print("Загрузка маппингов...")

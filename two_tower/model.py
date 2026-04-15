@@ -91,3 +91,11 @@ def map_at_k_two_tower(model, test_interactions, k=12, batch_size=1024, device='
             ap = precision_sum / min(len(true_items), k)
             ap_scores.append(ap)
     return np.mean(ap_scores)
+
+
+def load_two_tower_model(path, num_users, num_items, device, embedding_dim = 128):
+    model = TwoTowerModel(num_users, num_items, embedding_dim=embedding_dim)
+    model.load_state_dict(torch.load(path, map_location=device))
+    model.to(device)
+    model.eval()
+    return model

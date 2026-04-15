@@ -16,7 +16,7 @@ app = FastAPI(title="H&M Recommendation API")
 
 
 class CFG:
-    model_type = consts.LIGTFM
+    model_type = consts.TWO_TOWER_MODEL
     data_output = './output'
 
 
@@ -31,7 +31,7 @@ recommender = None
 articles_df = None
 transactions_df = None
 user_to_idx = None
-
+customer_encoder = None
 
 class ProductInfo(BaseModel):
     article_id: int
@@ -52,17 +52,13 @@ class RecommendResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    global recommender, articles_df, transactions_df, user_to_idx
-    print("Загрузка данных...")
-    transactions_df, articles_df, customers_df, _ = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.data_output)
-
-    # Строим признаки и обучаем/загружаем модель (упрощённо – загружаем готовую)
+    global recommender, articles_df, transactions_df, user_to_idx, customer_encoder
+    transactions_df, articles_df, customers_df, _, customer_encoder = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.data_output)
     interaction, user_features, item_features, user_to_idx, item_to_idx = build_dataset_with_matrix(articles_df,
                                                                                         customers_df,
                                                                                         transactions_df,
                                                                                         CFG.data_output)
 
-    # Инициализируем рекомендателя
     recommender = HmRecommender(CFG.model_type)
     recommender.set_features(user_features, item_features)
 
@@ -96,7 +92,8 @@ async def get_frontend():
 async def get_user_history(user_id: str):
     """Возвращает список купленных пользователем товаров (с картинками)."""
     # Фильтруем транзакции по customer_id
-    user_purchases = tra1nsactions_df[transactions_df['customer_id'] == idx]
+    user_id_encoded = customer_encoder.transform([user_id])[0]
+    user_purchases = transactions_df[transactions_df['customer_id'] == user_id_encoded]
     if user_purchases.empty:
         return HistoryResponse(user_id=user_id, purchases=[])
 
@@ -111,7 +108,8 @@ async def recommend(user_id: str, top_k: int = 12):
     if recommender is None:
         raise HTTPException(status_code=503, detail="Модель не загружена")
 
-    recs = recommender.recommend(user_id, top_k=top_k)
+    user_id_encoded = customer_encoder.transform([user_id])[0]
+    recs = recommender.recommend(user_id_encoded, top_k=top_k)
     products = []
     for article_id, score in recs:
         info = get_product_info(article_id)

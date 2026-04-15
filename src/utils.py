@@ -99,4 +99,4 @@ def load_data(data_dir, encoder_output_dir):
     transactions['day'] = (transactions['t_dat'].max() - transactions['t_dat']).dt.days.astype('int16')
     transactions['week'] = (transactions['day'] // 7).astype('int8')
 
-    return transactions, articles, customers, sample_sub
+    return transactions, articles, customers, sample_sub, le

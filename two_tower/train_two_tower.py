@@ -60,7 +60,7 @@ def train_two_tower_with_logging(interaction,
         epoch_iterator.set_postfix({"Loss": f"{loss:.4f}", "MAP@12": f"{map_score:.6f}"})
         if save_best and map_score > best_map:
             best_map = map_score
-            torch.save(model.state_dict(), os.path.join(experiment_path,  'two_tower_best.pt'))
+            torch.save(model.state_dict(), os.path.join(experiment_path,  'model_best'))
             tqdm.write(f"  -> Новая лучшая модель сохранена (MAP@{k}={map_score:.6f})")
 
     pd.DataFrame(history).to_csv(log_file, index=False)
@@ -88,7 +88,7 @@ def train_two_tower_with_logging(interaction,
 
 if __name__ == "__main__":
     print("=== Загрузка данных ===")
-    transactions, articles, customers, sample_sub = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.data_output)
+    transactions, articles, customers, sample_sub, _ = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.data_output)
     print("=== Подготовка признаков ===")
     interaction, user_features, item_features, _, _ = build_dataset_with_matrix(articles, customers, transactions, CFG.data_output)
     print("=== Обучение модели ===")

@@ -80,7 +80,7 @@ def preprocess_customers(customers, output_dir):
     le = LabelEncoder()
     customers['club_code'] = le.fit_transform(customers['club_member_status'])
     save_preprocessor(le, os.path.join(output_dir, 'club_encoder.pkl'))
-    return customers[['customer_id', 'age_bin', 'club_code']], ['age_bin', 'club_code']
+    return customers[['customer_id', 'age_bin', 'club_code']], []
 
 
 
@@ -208,12 +208,15 @@ def build_dataset_with_matrix(articles, customers, transactions, output_dir):
     transactions = transactions[transactions['article_id'].isin(popular_items) &
                                 transactions['customer_id'].isin(active_users)]
 
+    transactions = transactions.groupby(['customer_id', 'article_id'], as_index=False).size()
     user_ids = transactions['customer_id'].unique()
     item_ids = transactions['article_id'].unique()
     user_to_idx = {uid: i for i, uid in enumerate(user_ids)}
     item_to_idx = {iid: j for j, iid in enumerate(item_ids)}
 
+
     # Матрица взаимодействий
+
     rows = [user_to_idx[uid] for uid in transactions['customer_id']]
     cols = [item_to_idx[iid] for iid in transactions['article_id']]
     data = np.ones(len(rows), dtype=np.float32)  # вместо np.ones(len(rows))

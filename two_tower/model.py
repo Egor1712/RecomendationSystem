@@ -5,12 +5,13 @@ import numpy as np
 from tqdm import tqdm
 
 class HMDataset(Dataset):
-    def __init__(self, interactions_csr, num_negatives=5):
+    def __init__(self, interactions_csr, device, num_negatives=5):
         self.interactions = interactions_csr
         self.num_negatives = num_negatives
         self.users, self.items = self.interactions.nonzero()
         self.n_users = interactions_csr.shape[0]
         self.n_items = interactions_csr.shape[1]
+        self.device = device
 
     def __len__(self):
         return len(self.users)
@@ -41,8 +42,7 @@ def train_two_tower_epoch(model, train_loader, optimizer, device):
     """Обучает одну эпоху с отображением прогресса по батчам."""
     model.train()
     total_loss = 0
-    # Оборачиваем train_loader в tqdm
-    pbar = tqdm(train_loader, desc="Training batches", leave=False)
+    pbar = tqdm(train_loader, desc="Training batches")
     for users, pos_items, neg_items in pbar:
         users = users.to(device)
         pos_items = pos_items.to(device)
@@ -59,12 +59,10 @@ def train_two_tower_epoch(model, train_loader, optimizer, device):
         optimizer.step()
 
         total_loss += loss.item()
-        # Обновляем описание прогресс-бара (показываем текущий loss)
-        pbar.set_postfix({"loss": f"{loss.item():.4f}"})
 
     return total_loss / len(train_loader)
 
-def map_at_k_two_tower(model, test_interactions, k=12, batch_size=1024, device='cpu'):
+def map_at_k_two_tower(model, test_interactions, k=12, batch_size=1024, device='cuda'):
     """Вычисляет MAP@12 для two-tower модели."""
     model.eval()
     n_users = test_interactions.shape[0]

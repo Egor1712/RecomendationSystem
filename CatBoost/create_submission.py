@@ -30,14 +30,13 @@ def inference(test_df, feature_cols):
 
 
 if __name__ == "__main__":
-    transactions, articles, customers, sample_sub = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.output_dir)
+    transactions, articles, customers, sample_sub, _ = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.output_dir)
     with open(os.path.join(CFG.output_dir, CFG.exp, 'df.pickle'), 'rb') as f:
         df_train = pickle.load(f)
     feature_cols = [c for c in df_train.columns if c not in ['customer_id', 'article_id', 'target']]
     # Подготавливаем тестовый датасет (нужно загрузить target_df = sample_sub)
-    target_df = sample_sub.copy()
     print("Построение тестового датасета...")
-    test_df, _ = build_full_dataset(transactions, articles, customers, target_df)
+    test_df, _ = build_full_dataset(transactions, articles, customers, sample_sub)
     # Предсказания
     test_df['pred'] = inference(test_df, feature_cols)
     # Формируем submission

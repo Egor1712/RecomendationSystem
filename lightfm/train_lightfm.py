@@ -23,14 +23,14 @@ from src.utils import save_model, load_data
 class CFG:
     data_output = './output'
     num_threads = 24
-    lightfm_params = {
-        'loss': 'warp',
-        "learning_rate": 0.05,
-        'no_components': 256,
-        'user_alpha': 1e-6,
-        'item_alpha': 1e-6,
-        'random_state': 42
-    }
+    lightfm_params = {'no_components': 60,
+   'learning_schedule': 'adagrad',
+   'loss': 'bpr',
+   'learning_rate': 0.024169871051368697,
+   'item_alpha': 1.5038748403807634e-08,
+   'user_alpha': 5.035922243112898e-09,
+   'max_sampled': 11
+                      }
 
 
 os.makedirs(CFG.data_output, exist_ok=True)
@@ -107,10 +107,10 @@ def train_lightfm_with_logging(interaction, user_features, item_features,
 
 if __name__ == "__main__":
     print("=== Загрузка данных ===")
-    transactions, articles, customers, sample_sub = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.data_output)
+    transactions, articles, customers, sample_sub, _ = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.data_output)
     print("=== Подготовка признаков ===")
 
     interaction, user_features, item_features, _, _ = build_dataset_with_matrix(articles, customers, transactions, CFG.data_output)
     print("=== Обучение модели ===")
-    train_lightfm_with_logging(interaction, user_features, item_features, epochs=20)
+    train_lightfm_with_logging(interaction, None, None, epochs=32)
     print("=== Обучение завершено. Запустите API: python api.py ===")

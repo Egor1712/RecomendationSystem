@@ -19,7 +19,7 @@ warnings.filterwarnings('ignore')
 class CFG:
     train = True
     output_dir = "./output"
-    exp = "1"
+    exp = "120"
     seed = 42
     fold = 5
     used_fold = [0, 1, 2, 3, 4]
@@ -96,7 +96,7 @@ def train_model(df, feature_cols):
 
 
 if __name__ == "__main__":
-    transactions, articles, customers, sample_sub = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.output_dir)
+    transactions, articles, customers, sample_sub, _ = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.output_dir)
     target_df = transactions[transactions['t_dat'] >= CFG.val_start_date].reset_index(drop=True)
     transactions = transactions[transactions['t_dat'] < CFG.val_start_date].reset_index(drop=True)
     df, feature_cols = build_full_dataset(transactions, articles, customers, target_df, train=True)

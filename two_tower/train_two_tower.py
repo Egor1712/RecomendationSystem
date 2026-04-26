@@ -27,23 +27,23 @@ class CFG:
 os.makedirs(CFG.data_output, exist_ok=True)
 os.makedirs(os.path.join(CFG.data_output, CFG.experiment_name), exist_ok=True)
 
-def train_two_tower_with_logging(interaction,
+def train_two_tower_with_logging(interaction_train,
+                                 interaction_val,
                                  epochs=30,
-                                 batch_size=1024, embedding_dim=128,
+                                 batch_size=2048,
+                                 embedding_dim=128,
                                  num_negatives=5,
                                  learning_rate=0.001,
-                                 validation_size=0.2,
                                  k=12,
                                  save_best=True):
     experiment_path = os.path.join(CFG.data_output, CFG.experiment_name)
     # Разделение на train/validation
-    train_interaction, val_interaction = train_test_split(interaction, test_size=validation_size, random_state=42)
-    train_dataset = HMDataset(train_interaction, num_negatives=num_negatives)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=24)
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    train_dataset = HMDataset(interaction_train, device, num_negatives=num_negatives)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=24)
+
     print(f"Используется устройство: {device}")
-    model = TwoTowerModel(interaction.shape[0], interaction.shape[1], embedding_dim).to(device)
+    model = TwoTowerModel(interaction_train.shape[0], interaction_train.shape[1], embedding_dim).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     log_file = os.path.join(experiment_path, 'training_log.csv')
@@ -53,7 +53,7 @@ def train_two_tower_with_logging(interaction,
     epoch_iterator = tqdm(range(1, epochs + 1), desc="Обучение Two-Tower", unit="epoch")
     for epoch in epoch_iterator:
         loss = train_two_tower_epoch(model, train_loader, optimizer, device)
-        map_score = map_at_k_two_tower(model, val_interaction, k=k, batch_size=batch_size, device=device)
+        map_score = map_at_k_two_tower(model, interaction_val, k=k, batch_size=batch_size, device=device)
         history['epoch'].append(epoch)
         history['train_loss'].append(loss)
         history['map@12'].append(map_score)
@@ -90,8 +90,14 @@ if __name__ == "__main__":
     print("=== Загрузка данных ===")
     transactions, articles, customers, sample_sub, _ = load_data(consts.WORKING_DATASET_DIRECTORY, CFG.data_output)
     print("=== Подготовка признаков ===")
-    interaction, user_features, item_features, _, _ = build_dataset_with_matrix(articles, customers, transactions, CFG.data_output)
+    val_start_date = '2020-09-16'
+    train_mask = transactions['t_dat'] < val_start_date
+    val_mask = transactions['t_dat'] >= val_start_date
+    train_df = transactions[train_mask]
+    val_df = transactions[val_mask]
+    interaction_train, _, _, _, _ = build_dataset_with_matrix(articles, customers, train_df, CFG.data_output)
+    interaction_val, _, _, _, _ = build_dataset_with_matrix(articles, customers, val_df, CFG.data_output)
     print("=== Обучение модели ===")
-    train_two_tower_with_logging(interaction)
+    train_two_tower_with_logging(interaction_train,interaction_val,  epochs=100)
 
 

@@ -1,0 +1,2 @@
+��q       }�(�emb_dim�K@�lr�G?:rם�(��
+batch_size�M �dropout�G?��X�C&�hidden_dims�]�(M K�e�weight_decay�G?PBR2H`u.

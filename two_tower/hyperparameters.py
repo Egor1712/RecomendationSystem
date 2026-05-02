@@ -1,7 +1,5 @@
 import json
 import os
-import pickle
-
 import numpy as np
 import pandas as pd
 import torch
@@ -241,16 +239,6 @@ def objective(trial, train_dataset, val_dataset, num_users, num_items,
 
     for epoch in range(num_epochs_fast):
         train_loss = train_one_epoch(model, train_loader, optimizer,  device, log_interval=100)
-        if epoch % 2 == 0:
-            map12 = fast_evaluate_map_at_k(
-                model, val_loader, device, num_items,
-                all_item_features, user_features_dict,
-                k=12
-            )
-            print(f"MAP@12 {map12}")
-            trial.report(map12, epoch)
-            if trial.should_prune():
-                raise optuna.TrialPruned()
 
     final_map = fast_evaluate_map_at_k(
         model, val_loader, device, num_items,
@@ -348,12 +336,11 @@ def run_hyperparam_search(train_dataset, val_dataset, num_users, num_items,
 
 if __name__ == '__main__':
     train = True
-    study = True
+    study = False
     transactions, articles, customers, rfm = load_data(RESULT_PREPROCESSED_PATH)
     transactions = transactions[transactions['t_dat'] > '2020-08-21']
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     user_cat_cols = ['age_group', 'club_member_status', 'fashion_news_frequency']
-
 
     user_encoders = {}
     user_cat_sizes = {}
@@ -428,12 +415,13 @@ if __name__ == '__main__':
             all_item_features, user_features_dict_idx,
             device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
             n_trials=30,
-            n_jobs=1
+            n_jobs=2
         )
 
     if train:
         batch_size = 1024
-        params = {'emb_dim': 64, 'lr': 0.0015751320499779737, 'dropout': 0.4464704583099741, 'hidden_dims': [128, 64], 'weight_decay': 0.0008123245085588687}
+        with open("best_params.json", "r") as f:
+            params = json.load(f)
 
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=22)
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=22)
@@ -456,7 +444,7 @@ if __name__ == '__main__':
             losses.append(train_loss)
             map12 = fast_evaluate_map_at_k(
                 model, val_loader, device, num_items,
-                all_item_features, user_features_dict,
+                all_item_features, user_features_dict_idx,
                 k=12)
             maps.append(map12)
             print(f"MAP@12 {map12}")

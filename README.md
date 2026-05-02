@@ -20,3 +20,5 @@ lightfm/training.ipynb - подбор гиперпараметров для Ligh
 
 two-tower/training.ipynb - подбор гиперпараметров для TwoTower, обучение лучшей модели. пришлось сделать файл на питоне еще, так как ноутбук не может в мультипроцессинг
 
+Результат эксперимента неудачный
+![training_curve.png](two_tower%2Ftraining_curve.png)

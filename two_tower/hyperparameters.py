@@ -175,29 +175,58 @@ class TwoTowerModel(nn.Module):
         return item_vec
 
 
-def train_one_epoch(model, loader, optimizer, device, log_interval=50):
+def train_one_epoch(model, loader, optimizer, device,all_item_features,  num_negs=5, log_interval=50):
     model.train()
     total_loss = 0
     pbar = tqdm(loader, desc="Training", unit="batch", leave=False)
 
-    for batch_idx, (user_batch, pos_item_batch, user_feats, item_feats, weights) in enumerate(pbar):
+    for batch_idx, (user_batch, pos_item_batch, user_feats, pos_item_feats, weights) in enumerate(pbar):
         user_batch = user_batch.to(device)
         pos_item_batch = pos_item_batch.to(device)
         user_feats = user_feats.to(device)
-        item_feats = item_feats.to(device)
+        pos_item_feats = pos_item_feats.to(device)
         weights = weights.to(device)
+        batch_size = pos_item_batch.shape[0]
 
         # Генерация отрицательных товаров (случайных)
         neg_item_batch = torch.randint(0, model.item_id_emb.num_embeddings,
-                                       pos_item_batch.shape, device=device)
+                                       (batch_size, num_negs), device=device)
+        pos_expanded = pos_item_batch.unsqueeze(1)  # (batch_size, 1)
+        mask = (neg_item_batch == pos_expanded)
+        while mask.any():
+            num_replace = mask.sum().item()
+            neg_item_batch[mask] = torch.randint(0, model.item_id_emb.num_embeddings,
+                                                 (num_replace,), device=device)
+            mask = (neg_item_batch == pos_expanded)
 
-        # Преобразование фичей в список тензоров (каждый признак отдельно)
+        neg_item_feats = all_item_features[neg_item_batch]  # (batch_size, num_negs, feat_dim)
+
+        # Перестраиваем для передачи в модель: нужно для каждого негатива отдельно пройти forward.
+        # Чтобы не делать цикл по num_negs, можно расширить входные тензоры.
+        # Сделаем так: повторим user_batch и user_feats num_negs раз, объединим с негативами.
+        user_batch_multi = user_batch.repeat_interleave(num_negs)  # (batch_size * num_negs)
+        user_feats_multi = user_feats.repeat_interleave(num_negs, dim=0)  # (batch_size*num_negs, feat_dim)
+        neg_item_batch_flat = neg_item_batch.flatten()  # (batch_size * num_negs)
+        neg_item_feats_flat = neg_item_feats.view(-1, neg_item_feats.shape[-1])  # (batch_size*num_negs, feat_dim)
+
+        # Скоринг для позитивных (один на пользователя)
         user_feats_list = [user_feats[:, i] for i in range(user_feats.shape[1])]
-        item_feats_list = [item_feats[:, i] for i in range(item_feats.shape[1])]
-        pos_scores = model(user_batch, pos_item_batch, user_feats_list, item_feats_list)
-        neg_scores = model(user_batch, neg_item_batch, user_feats_list, item_feats_list)
+        pos_item_feats_list = [pos_item_feats[:, i] for i in range(pos_item_feats.shape[1])]
+        pos_scores = model(user_batch, pos_item_batch, user_feats_list, pos_item_feats_list)  # [batch_size]
 
-        loss = -torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-8).mean()
+        # Скоринг для негативов (все num_negs на пользователя)
+        user_feats_list_multi = [user_feats_multi[:, i] for i in range(user_feats_multi.shape[1])]
+        neg_item_feats_list = [neg_item_feats_flat[:, i] for i in range(neg_item_feats_flat.shape[1])]
+        neg_scores = model(user_batch_multi, neg_item_batch_flat,
+                           user_feats_list_multi, neg_item_feats_list)  # [batch_size * num_negs]
+        neg_scores = neg_scores.view(batch_size, num_negs)  # [batch_size, num_negs]
+
+        # BPR loss с несколькими негативами
+        # Разница pos - neg для каждого негатива: pos_scores[:, None] - neg_scores
+        log_sigmoid = torch.log(torch.sigmoid(pos_scores.unsqueeze(1) - neg_scores) + 1e-8)  # [batch_size, num_negs]
+        # Взвешенное среднее: вес применяется ко всей строке (ко всем негативам этого пользователя)
+        # Умножаем weights[:, None] на log_sigmoid, усредняем по всем элементам
+        loss = - (weights.unsqueeze(1) * log_sigmoid).mean()
 
         optimizer.zero_grad()
         loss.backward()
@@ -238,7 +267,7 @@ def objective(trial, train_dataset, val_dataset, num_users, num_items,
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     for epoch in range(num_epochs_fast):
-        train_loss = train_one_epoch(model, train_loader, optimizer,  device, log_interval=100)
+        train_loss = train_one_epoch(model, train_loader, optimizer,  device, all_item_features, log_interval=100)
 
     final_map = fast_evaluate_map_at_k(
         model, val_loader, device, num_items,
@@ -339,6 +368,10 @@ if __name__ == '__main__':
     study = False
     transactions, articles, customers, rfm = load_data(RESULT_PREPROCESSED_PATH)
     transactions = transactions[transactions['t_dat'] > '2020-08-21']
+    transactions = transactions.groupby(['customer_id', 'article_id']).agg(
+        {'price': 'sum', 't_dat': 'count'}).reset_index()
+    transactions = transactions[['customer_id', 'article_id', 'price']]
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     user_cat_cols = ['age_group', 'club_member_status', 'fashion_news_frequency']
 
@@ -380,7 +413,7 @@ if __name__ == '__main__':
 
     num_users = len(user_id_to_idx)
     num_items = len(item_id_to_idx)
-    transactions['weight'] = np.log1p(transactions['price'])
+    transactions['weight'] = transactions['price']
 
     # Преобразуем ID в индексы
     transactions['user_idx'] = transactions['customer_id'].map(user_id_to_idx)
@@ -390,6 +423,7 @@ if __name__ == '__main__':
     transactions = transactions.dropna(subset=['user_idx', 'item_idx'])
     transactions['user_idx'] = transactions['user_idx'].astype(int)
     transactions['item_idx'] = transactions['item_idx'].astype(int)
+
     dataset = HMDataset(transactions, user_features_dict, item_features_dict,
               user_cat_cols, item_cat_cols, user_id_to_idx, item_id_to_idx)
     train_size = int(0.8 * len(dataset))
@@ -402,8 +436,8 @@ if __name__ == '__main__':
     all_item_features = torch.zeros((num_items, len(item_cat_sizes_list)), dtype=torch.long)
     for aid, idx in item_id_to_idx.items():
         feats = item_features_dict.get(aid, [0] * len(item_cat_sizes_list))
-        all_item_features[idx] = torch.tensor(feats)
-
+        all_item_features[idx] = torch.tensor(feats,device=device)
+    all_item_features = all_item_features.to(device)
     user_features_dict_idx = {}
     for uid, feats in user_features_dict.items():
         if uid in user_id_to_idx:
@@ -419,12 +453,12 @@ if __name__ == '__main__':
         )
 
     if train:
-        batch_size = 1024
+        batch_size = 512
         with open("best_params.json", "r") as f:
             params = json.load(f)
 
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=22)
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=22)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
 
         model = TwoTowerModel(
             num_users=num_users,
@@ -439,37 +473,14 @@ if __name__ == '__main__':
         optimizer = optim.Adam(model.parameters(), lr=params['lr'], weight_decay=params["weight_decay"])
         losses = []
         maps = []
-        for epoch in range(40):
-            train_loss = train_one_epoch(model, train_loader, optimizer, device, log_interval=100)
+        for epoch in range(15):
+            train_loss = train_one_epoch(model, train_loader, optimizer, device,all_item_features, log_interval=100)
+            print(f'Loss {train_loss}')
             losses.append(train_loss)
-            map12 = fast_evaluate_map_at_k(
-                model, val_loader, device, num_items,
-                all_item_features, user_features_dict_idx,
-                k=12)
-            maps.append(map12)
-            print(f"MAP@12 {map12}")
 
-        epochs = np.arange(1, len(losses) + 1)
-
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
-
-        ax1.plot(epochs, losses, 'b-', label='Loss')
-        ax1.set_xlabel('Epoch')
-        ax1.set_ylabel('Loss')
-        ax1.set_title('Training Loss')
-        ax1.grid(True)
-        ax1.legend()
-
-        ax2.plot(epochs, maps, 'r-', label='MAP@12')
-        ax2.set_xlabel('Epoch')
-        ax2.set_ylabel('MAP@12')
-        ax2.set_title('Mean Average Precision @12 on Test Subset')
-        ax2.grid(True)
-        ax2.legend()
-
-        plt.tight_layout()
-        plt.savefig('training_curve.png', dpi=150)
-        plt.show()
-
-        final_map12 = maps[-1] if maps else 0.0
-        print(f"Финальная MAP@12 на подвыборке: {final_map12:.6f}")
+        map12 = fast_evaluate_map_at_k(
+            model, val_loader, device, num_items,
+            all_item_features, user_features_dict_idx,
+            k=12)
+        print(f"MAP@12 {map12}")
+        print(f"Loses {losses}")

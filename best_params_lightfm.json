@@ -1,0 +1,9 @@
+{
+    "learning_rate": 0.0010253509690168502,
+    "no_components": 144,
+    "loss": "bpr",
+    "item_alpha": 8.629132190071872e-09,
+    "user_alpha": 2.2310108018679215e-09,
+    "max_sampled": 70,
+    "learning_schedule": "adadelta"
+}

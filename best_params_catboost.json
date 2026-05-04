@@ -1,8 +1,8 @@
 {
-    "learning_rate": 0.015355286838886862,
+    "learning_rate": 0.005542561258655853,
     "max_depth": 10,
-    "l2_leaf_reg": 0.24658329458549094,
-    "border_count": 166,
-    "scale_pos_weight": 15.958237752949746,
-    "iterations": 734
+    "l2_leaf_reg": 0.0003570095960030948,
+    "border_count": 180,
+    "scale_pos_weight": 25.441660909383675,
+    "iterations": 1280
 }
